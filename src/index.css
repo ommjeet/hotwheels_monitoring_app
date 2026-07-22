@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-display: "Outfit", sans-serif;
+
+  --color-brand-blue: #3B82F6;
+  --color-brand-blue-hover: #2563EB;
+  --color-bg-light-blue: #EEF5FF;
+}
+
+/* Custom styles for Soft UI premium design */
+body {
+  font-family: var(--font-sans);
+  background-color: #EEF5FF;
+  color: #1E293B;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Elegant minimalist scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EEF5FF;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Hide scrollbars but keep functionality */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Premium Soft UI Card */
+.soft-card {
+  background-color: #FFFFFF;
+  border-radius: 28px;
+  box-shadow: 0 10px 30px -5px rgba(59, 130, 246, 0.04), 0 4px 12px -2px rgba(59, 130, 246, 0.02);
+  border: 1px solid rgba(219, 234, 254, 0.6);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.soft-card:hover {
+  box-shadow: 0 20px 40px -10px rgba(59, 130, 246, 0.08), 0 8px 16px -4px rgba(59, 130, 246, 0.03);
+  transform: translateY(-2px);
+}
+
+/* Soft Dotted Pattern */
+.bg-dots {
+  background-image: radial-gradient(#3B82F6 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.bg-dots-light {
+  background-image: radial-gradient(#93C5FD 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Smooth organic shape for decorative elements */
+.blob-shape-1 {
+  border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+}
+
+.blob-shape-2 {
+  border-radius: 50% 50% 30% 70% / 50% 60% 40% 50%;
+}
+
+/* Custom input style for Soft UI theme */
+.win-input {
+  background-color: #FFFFFF;
+  border: 1px solid #D1E2FF;
+  color: #1E293B;
+  border-radius: 9999px;
+  padding: 10px 20px;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.win-input:focus {
+  outline: none;
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Custom button style for Soft UI theme */
+.win-btn-primary {
+  background-color: #3B82F6;
+  color: #FFFFFF;
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 10px 24px;
+  font-size: 0.875rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: none;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+}
+
+.win-btn-primary:hover {
+  background-color: #2563EB;
+  cursor: pointer;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.win-btn-secondary {
+  background-color: #FFFFFF;
+  border: 1px solid #D1E2FF;
+  color: #2563EB;
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 10px 24px;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.win-btn-secondary:hover {
+  background-color: #F0F6FF;
+  border-color: #3B82F6;
+  cursor: pointer;
+}
