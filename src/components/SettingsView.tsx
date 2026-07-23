@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, 
   Chrome, 
@@ -7,11 +7,11 @@ import {
   Database, 
   Info, 
   Save, 
-  ToggleLeft, 
-  ToggleRight,
+  RotateCcw,
   ShieldCheck,
   AlertTriangle
 } from 'lucide-react';
+import { resetSystemParameters } from '../lib/api';
 
 interface SettingsViewProps {
   settings: {
@@ -31,12 +31,14 @@ interface SettingsViewProps {
     coolDownAfterScans?: number;
     coolDownDurationMinutes?: number;
   };
-  onUpdateSettings: (updatedSettings: any) => void;
+  onUpdateSettings: (updatedSettings: any) => Promise<void> | void;
+  onResetSettings?: () => Promise<void> | void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
-  onUpdateSettings
+  onUpdateSettings,
+  onResetSettings
 }) => {
   const [rememberSession, setRememberSession] = useState(settings.rememberSession ?? true);
   const [localChromePort, setLocalChromePort] = useState(settings.localChromePort ?? 9222);
@@ -56,29 +58,80 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [coolDownDurationMinutes, setCoolDownDurationMinutes] = useState(settings.coolDownDurationMinutes ?? 2);
 
   const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSave = (e: React.FormEvent) => {
+  // Keep state synchronized with incoming settings prop
+  useEffect(() => {
+    setRememberSession(settings.rememberSession ?? true);
+    setLocalChromePort(settings.localChromePort ?? 9222);
+    setHeadlessMode(settings.headlessMode ?? false);
+    setUserLocation(settings.userLocation || '');
+    setToastAlertsEnabled(settings.toastAlertsEnabled ?? true);
+    setAutoCheckoutSimulated(settings.autoCheckoutSimulated ?? true);
+    setAutoCheckoutPaymentMethod(settings.autoCheckoutPaymentMethod || 'COD');
+    setStorageCleanTriggerCount(settings.storageCleanTriggerCount ?? 100);
+    setEnableJitter(settings.enableJitter ?? true);
+    setJitterRangeSeconds(settings.jitterRangeSeconds ?? 2);
+    setEmulateMouseMovement(settings.emulateMouseMovement ?? true);
+    setRotateUserAgent(settings.rotateUserAgent ?? true);
+    setCoolDownAfterScans(settings.coolDownAfterScans ?? 40);
+    setCoolDownDurationMinutes(settings.coolDownDurationMinutes ?? 2);
+  }, [settings]);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateSettings({
-      rememberSession,
-      localChromePort: Number(localChromePort),
-      headlessMode,
-      userLocation,
-      toastAlertsEnabled,
-      autoCheckoutSimulated,
-      autoCheckoutPaymentMethod: 'COD',
-      storageCleanTriggerCount: Number(storageCleanTriggerCount),
-      enableJitter,
-      jitterRangeSeconds: Number(jitterRangeSeconds),
-      emulateMouseMovement,
-      rotateUserAgent,
-      coolDownAfterScans: Number(coolDownAfterScans),
-      coolDownDurationMinutes: Number(coolDownDurationMinutes)
-    });
-    setIsSaved(true);
-    setTimeout(() => {
-      setIsSaved(false);
-    }, 2500);
+    setErrorMessage(null);
+    setIsSaving(true);
+    try {
+      const payload = {
+        rememberSession,
+        localChromePort: Number(localChromePort),
+        headlessMode,
+        userLocation,
+        toastAlertsEnabled,
+        autoCheckoutSimulated,
+        autoCheckoutPaymentMethod: 'COD',
+        storageCleanTriggerCount: Number(storageCleanTriggerCount),
+        enableJitter,
+        jitterRangeSeconds: Number(jitterRangeSeconds),
+        emulateMouseMovement,
+        rotateUserAgent,
+        coolDownAfterScans: Number(coolDownAfterScans),
+        coolDownDurationMinutes: Number(coolDownDurationMinutes)
+      };
+      await onUpdateSettings(payload);
+      setIsSaved(true);
+      setTimeout(() => {
+        setIsSaved(false);
+      }, 2500);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to persist settings profile');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm('Reset all system parameters to default factory settings?')) {
+      return;
+    }
+    setErrorMessage(null);
+    setIsResetting(true);
+    try {
+      if (onResetSettings) {
+        await onResetSettings();
+      } else {
+        await resetSystemParameters();
+      }
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2500);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to reset settings');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   return (
@@ -397,11 +450,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          {/* Commit Button */}
-          <div className="md:col-span-2 flex justify-end pt-5 border-t border-blue-50 font-mono">
+          {/* Error Banner */}
+          {errorMessage && (
+            <div className="md:col-span-2 bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-2xl flex items-center space-x-3 text-xs font-mono">
+              <AlertTriangle className="h-5 w-5 text-rose-500 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="md:col-span-2 flex items-center justify-between pt-5 border-t border-blue-50 font-mono">
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={isResetting || isSaving}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-full flex items-center space-x-2 transition cursor-pointer disabled:opacity-50"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>{isResetting ? 'Resetting...' : 'Reset to Defaults'}</span>
+            </button>
+
             <button
               type="submit"
               id="btn-save-settings"
+              disabled={isSaving || isResetting}
               className={`font-bold text-xs uppercase tracking-wider px-8 py-3.5 rounded-full flex items-center space-x-2 transition cursor-pointer shadow-lg transition-all duration-200 ${
                 isSaved 
                   ? 'bg-emerald-500 text-white shadow-emerald-500/15' 
@@ -409,7 +481,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               }`}
             >
               <Save className="h-4 w-4 stroke-[2.5]" />
-              <span>{isSaved ? 'Saved Successfully! ✓' : 'Commit Settings Profile'}</span>
+              <span>{isSaving ? 'Persisting...' : isSaved ? 'Saved Successfully! ✓' : 'Commit Settings Profile'}</span>
             </button>
           </div>
 

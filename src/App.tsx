@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { WatchlistItem, InstamartItem, ActivityEvent, SystemStats, SchedulerConfig } from './types';
 import { DEFAULT_RULES, INSTAMART_SAMPLE_PRODUCTS } from './lib/mockData';
+import { fetchSystemParameters, saveSystemParameters, resetSystemParameters } from './lib/api';
 import { WindowsFrame } from './components/WindowsFrame';
 import { NavigationSidebar } from './components/NavigationSidebar';
 import { DashboardView } from './components/DashboardView';
@@ -152,6 +153,18 @@ export default function App() {
 
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const uptimeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load system parameters from backend database on mount
+  useEffect(() => {
+    fetchSystemParameters()
+      .then(fetchedParams => {
+        setSettings(fetchedParams);
+        addEvent('System parameters retrieved successfully from backend storage.', 'info');
+      })
+      .catch(err => {
+        console.warn('Could not load system parameters from backend API, using cached parameters:', err);
+      });
+  }, []);
 
   // Sync states to local storage
   useEffect(() => {
@@ -657,9 +670,26 @@ export default function App() {
     addEvent(`Scheduler settings committed. Interval is now set to ${newConfig.refreshInterval} seconds.`, 'success');
   };
 
-  const handleUpdateSettings = (newSettings: any) => {
-    setSettings(newSettings);
-    addEvent('System configuration committed to local storage properties.', 'success');
+  const handleUpdateSettings = async (newSettings: any) => {
+    try {
+      const updated = await saveSystemParameters(newSettings);
+      setSettings(updated);
+      addEvent('System parameters updated and persisted in backend database.', 'success');
+    } catch (err: any) {
+      addEvent(`Failed to persist system parameters: ${err.message}`, 'error');
+      throw err;
+    }
+  };
+
+  const handleResetSettings = async () => {
+    try {
+      const resetParams = await resetSystemParameters();
+      setSettings(resetParams);
+      addEvent('System parameters reset to factory default values in database.', 'warning');
+    } catch (err: any) {
+      addEvent(`Failed to reset system parameters: ${err.message}`, 'error');
+      throw err;
+    }
   };
 
   return (
@@ -755,6 +785,7 @@ export default function App() {
           <SettingsView 
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
+            onResetSettings={handleResetSettings}
           />
         )}
 
