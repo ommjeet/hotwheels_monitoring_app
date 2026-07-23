@@ -6,6 +6,8 @@ import dashboardRouter from './server/routes/dashboard.routes';
 import watchlistRouter from './server/routes/watchlist.routes';
 import schedulerRouter from './server/routes/scheduler.routes';
 import activityRouter from './server/routes/activity.routes';
+import analyticsRouter from './server/routes/analytics.routes';
+import screenshotRouter from './server/routes/screenshot.routes';
 import { schedulerEngineService } from './server/services/schedulerEngine.service';
 import { activityService } from './server/services/activity.service';
 import { requestLogger } from './server/middleware/logger';
@@ -37,6 +39,8 @@ async function startServer() {
   app.use('/api/watchlist', watchlistRouter);
   app.use('/api/scheduler', schedulerRouter);
   app.use('/api/activity', activityRouter);
+  app.use('/api/analytics', analyticsRouter);
+  app.use('/api/screenshots', screenshotRouter);
 
   // Global Error Handler for API
   app.use(errorHandler);

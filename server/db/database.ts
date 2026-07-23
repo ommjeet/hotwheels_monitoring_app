@@ -17,6 +17,9 @@ import {
   DEFAULT_JOB_HISTORY
 } from '../config/defaults';
 
+import { AnalyticsMetricSnapshot } from '../models/analytics.model';
+import { ScreenshotMetadata, ScreenshotConfig } from '../models/screenshot.model';
+
 export interface DatabaseSchema {
   systemParameters: SystemParameters;
   engineState: EngineState;
@@ -26,7 +29,9 @@ export interface DatabaseSchema {
   activityEvents: any[];
   recentItems: any[];
   watchlist: any[];
-  screenshots: any[];
+  screenshots: ScreenshotMetadata[];
+  screenshotConfig: ScreenshotConfig;
+  analyticsSnapshots: AnalyticsMetricSnapshot[];
 }
 
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -52,12 +57,18 @@ export async function getDatabase() {
     activityEvents: [...DEFAULT_INITIAL_ACTIVITIES],
     recentItems: [...SAMPLE_CATALOG],
     watchlist: [...DEFAULT_INITIAL_WATCHLIST],
-    screenshots: [SAMPLE_CATALOG[0], SAMPLE_CATALOG[1]]
+    screenshots: [SAMPLE_CATALOG[0], SAMPLE_CATALOG[1]],
+    screenshotConfig: {
+      isCaptureEnabled: true,
+      maxStorageCount: 100,
+      capturesDirectory: 'C:\\Users\\LocalCollector\\HotWheelsMonitor\\captures\\'
+    },
+    analyticsSnapshots: []
   };
 
   dbInstance = await JSONFilePreset<DatabaseSchema>(DB_FILE, defaultData);
 
-  // Migration check for existing db.json files created prior to scheduler addition
+  // Migration check for existing db.json files created prior to scheduler/analytics addition
   await dbInstance.read();
   let needsWrite = false;
 
@@ -71,6 +82,18 @@ export async function getDatabase() {
   }
   if (!dbInstance.data.jobExecutionHistory) {
     dbInstance.data.jobExecutionHistory = [...DEFAULT_JOB_HISTORY];
+    needsWrite = true;
+  }
+  if (!dbInstance.data.analyticsSnapshots) {
+    dbInstance.data.analyticsSnapshots = [];
+    needsWrite = true;
+  }
+  if (!dbInstance.data.screenshotConfig) {
+    dbInstance.data.screenshotConfig = {
+      isCaptureEnabled: true,
+      maxStorageCount: 100,
+      capturesDirectory: 'C:\\Users\\LocalCollector\\HotWheelsMonitor\\captures\\'
+    };
     needsWrite = true;
   }
 

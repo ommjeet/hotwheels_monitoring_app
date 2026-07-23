@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Image as ImageIcon, 
   Search, 
@@ -9,9 +9,13 @@ import {
   Calendar,
   Sparkles,
   DollarSign,
-  Maximize2
+  Maximize2,
+  Camera,
+  CameraOff,
+  RefreshCw
 } from 'lucide-react';
 import { InstamartItem } from '../types';
+import { screenshotApi } from '../lib/screenshotApi';
 
 interface ScreenshotGalleryViewProps {
   screenshots: InstamartItem[];
@@ -27,6 +31,39 @@ export const ScreenshotGalleryView: React.FC<ScreenshotGalleryViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [selectedScreenshot, setSelectedScreenshot] = useState<InstamartItem | null>(null);
+  const [isCaptureEnabled, setIsCaptureEnabled] = useState<boolean>(true);
+  const [isToggling, setIsToggling] = useState<boolean>(false);
+  const [capturesDirectory, setCapturesDirectory] = useState<string>('C:\\Users\\LocalCollector\\HotWheelsMonitor\\captures\\');
+
+  const loadCaptureStatus = async () => {
+    try {
+      const status = await screenshotApi.getCaptureStatus();
+      setIsCaptureEnabled(status.isCaptureEnabled);
+      if (status.capturesDirectory) {
+        setCapturesDirectory(status.capturesDirectory);
+      }
+    } catch (err) {
+      console.warn('Failed to load screenshot capture status:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadCaptureStatus();
+  }, []);
+
+  const handleToggleCapture = async () => {
+    try {
+      setIsToggling(true);
+      const nextState = !isCaptureEnabled;
+      await screenshotApi.setCaptureStatus(nextState);
+      setIsCaptureEnabled(nextState);
+    } catch (err) {
+      console.error('Failed to toggle screenshot capture:', err);
+      alert('Failed to update capture status on server');
+    } finally {
+      setIsToggling(false);
+    }
+  };
 
   const categories = [
     { id: 'all', label: 'All Hits' },
@@ -37,7 +74,7 @@ export const ScreenshotGalleryView: React.FC<ScreenshotGalleryViewProps> = ({
   ];
 
   const handleOpenFolder = () => {
-    alert("Executing subprocess action: \nexplorer.exe \"C:\\Users\\LocalCollector\\HotWheelsMonitor\\captures\\\"");
+    alert(`Executing subprocess action: \nexplorer.exe "${capturesDirectory}"`);
   };
 
   const filteredScreenshots = screenshots.filter(item => {
@@ -55,14 +92,42 @@ export const ScreenshotGalleryView: React.FC<ScreenshotGalleryViewProps> = ({
           <h1 className="font-display font-bold text-xl text-slate-800 flex items-center space-x-2.5">
             <ImageIcon className="h-5 w-5 text-blue-500" />
             <span>Screenshot Shelf</span>
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono border font-bold ${
+              isCaptureEnabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              {isCaptureEnabled ? 'AUTO-CAPTURE ACTIVE' : 'CAPTURE SUSPENDED'}
+            </span>
           </h1>
           <p className="text-[11px] text-slate-450 font-mono mt-1">
             Automatic high-fidelity listings captured at the exact millisecond of matching.
           </p>
         </div>
 
-        {/* Directory Operations */}
+        {/* Directory Operations & Capture Control */}
         <div className="flex items-center space-x-2 font-mono">
+          {/* Screenshot Capture Engine Toggle */}
+          <button
+            onClick={handleToggleCapture}
+            disabled={isToggling}
+            className={`px-4 py-2 font-bold text-xs flex items-center space-x-2 transition rounded-full cursor-pointer uppercase tracking-wider shadow-sm font-mono border ${
+              isCaptureEnabled 
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/80' 
+                : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100/80'
+            }`}
+            title={isCaptureEnabled ? "Screenshot capture is ENABLED. Click to disable automatic captures." : "Screenshot capture is DISABLED. Click to enable automatic captures."}
+          >
+            {isToggling ? (
+              <RefreshCw className="h-4 w-4 animate-spin text-slate-500" />
+            ) : isCaptureEnabled ? (
+              <Camera className="h-4 w-4 text-emerald-600 stroke-[2.5]" />
+            ) : (
+              <CameraOff className="h-4 w-4 text-rose-600 stroke-[2.5]" />
+            )}
+            <span>
+              CAPTURE: {isCaptureEnabled ? 'ENABLED' : 'DISABLED'}
+            </span>
+          </button>
+
           <button
             onClick={handleOpenFolder}
             className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-blue-400 px-4 py-2 font-bold text-xs flex items-center space-x-2 transition rounded-full cursor-pointer uppercase tracking-wider shadow-sm"

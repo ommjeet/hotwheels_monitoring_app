@@ -1,6 +1,8 @@
 import { getDatabase } from '../db/database';
 import { SAMPLE_CATALOG } from '../config/defaults';
 import { PostActivityInput } from '../models/dashboard.model';
+import { analyticsService } from './analytics.service';
+import { screenshotService } from './screenshot.service';
 
 export class DashboardService {
   async getSummary() {
@@ -106,11 +108,19 @@ export class DashboardService {
       scannedItem.isCollectorPiece = true;
       scannedItem.collectorType = (matchedRule.name.includes('Super Treasure') ? 'Super TH' : 'Premium Car Culture') as any;
       
-      // Save to screenshots gallery
-      db.data.screenshots.unshift(scannedItem);
-      if (db.data.screenshots.length > 50) {
-        db.data.screenshots = db.data.screenshots.slice(0, 50);
-      }
+      // Delegate screenshot saving to screenshotService (which respects capture status)
+      await screenshotService.captureScreenshot({
+        id: scannedItem.id,
+        title: scannedItem.title,
+        price: scannedItem.price,
+        imageUrl: scannedItem.imageUrl,
+        collectorType: scannedItem.collectorType,
+        timestamp: scannedItem.timestamp || new Date().toISOString(),
+        stock: scannedItem.stock || 1,
+        inStock: true,
+        storeName: 'Instamart Hub #402',
+        matchedRuleId: matchedRule.id
+      }).catch(err => console.warn('Failed to capture screenshot:', err));
 
       db.data.engineState.totalMatches += 1;
 
@@ -137,6 +147,30 @@ export class DashboardService {
     }
 
     await db.write();
+
+    // Record event to Analytics Engine
+    await analyticsService.recordEvent({
+      type: 'scan',
+      scanTimeMs: db.data.engineState.averageScanTimeMs || 140,
+      detectionTimeMs: db.data.engineState.averageDetectionTimeMs || 1.2
+    }).catch(err => console.warn('Failed to record analytics scan event:', err));
+
+    if (matchedRule) {
+      await analyticsService.recordEvent({
+        type: 'match',
+        ruleId: matchedRule.id,
+        category: matchedRule.name
+      }).catch(err => console.warn('Failed to record analytics match event:', err));
+
+      if (matchedRule.autoPurchase) {
+        db.data.engineState.ordersCompleted += 1;
+        await db.write();
+        await analyticsService.recordEvent({
+          type: 'order',
+          ruleId: matchedRule.id
+        }).catch(err => console.warn('Failed to record analytics order event:', err));
+      }
+    }
 
     return {
       scannedItem,

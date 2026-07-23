@@ -26,6 +26,7 @@ import {
   updateSchedulerConfigApi
 } from './lib/schedulerApi';
 import { activityApi } from './lib/activityApi';
+import { screenshotApi } from './lib/screenshotApi';
 import { WindowsFrame } from './components/WindowsFrame';
 
 import { NavigationSidebar } from './components/NavigationSidebar';
@@ -219,9 +220,19 @@ export default function App() {
       .catch(err => {
         console.warn('Could not load scheduler config from backend API:', err);
       });
+
+    screenshotApi.fetchScreenshots()
+      .then(res => {
+        if (res.items && res.items.length > 0) {
+          setScreenshots(res.items);
+        }
+      })
+      .catch(err => {
+        console.warn('Could not load screenshots from backend API:', err);
+      });
   }, []);
 
-  // Sync dashboard summary and watchlist periodically every 4 seconds
+  // Sync dashboard summary, watchlist, and screenshots periodically every 4 seconds
   useEffect(() => {
     const pollInterval = setInterval(() => {
       fetchDashboardSummary()
@@ -236,6 +247,14 @@ export default function App() {
       fetchWatchlist()
         .then(data => {
           setWatchlist(data.items);
+        })
+        .catch(() => {});
+
+      screenshotApi.fetchScreenshots()
+        .then(res => {
+          if (res.items) {
+            setScreenshots(res.items);
+          }
         })
         .catch(() => {});
     }, 4000);
@@ -727,14 +746,26 @@ export default function App() {
     }
   };
 
-  const handleDeleteScreenshot = (id: string) => {
-    setScreenshots(prev => prev.filter(shot => shot.id !== id));
-    addEvent('Screenshot capture purged from local disk storage space.', 'warning');
+  const handleDeleteScreenshot = async (id: string) => {
+    try {
+      await screenshotApi.deleteScreenshot(id);
+      setScreenshots(prev => prev.filter(shot => shot.id !== id));
+      addEvent('Screenshot capture purged from local disk storage space.', 'warning');
+    } catch (err: any) {
+      console.error('Failed to delete screenshot on server:', err);
+      setScreenshots(prev => prev.filter(shot => shot.id !== id));
+    }
   };
 
-  const handleClearGallery = () => {
-    setScreenshots([]);
-    addEvent('Screenshot gallery memory successfully flushed.', 'warning');
+  const handleClearGallery = async () => {
+    try {
+      await screenshotApi.clearGallery();
+      setScreenshots([]);
+      addEvent('Screenshot gallery memory successfully flushed.', 'warning');
+    } catch (err: any) {
+      console.error('Failed to clear screenshot gallery on server:', err);
+      setScreenshots([]);
+    }
   };
 
   const handleClearEvents = async () => {
