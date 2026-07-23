@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import systemParametersRouter from './server/routes/systemParameters.routes';
+import dashboardRouter from './server/routes/dashboard.routes';
 import { requestLogger } from './server/middleware/logger';
 import { errorHandler } from './server/middleware/errorHandler';
 
@@ -20,11 +21,13 @@ async function startServer() {
     res.json({ status: 'ok', service: 'Instamart Collector Engine API', timestamp: new Date().toISOString() });
   });
 
-  // System Parameters API Routes
+  // API Routes
   app.use('/api/system-parameters', systemParametersRouter);
+  app.use('/api/dashboard', dashboardRouter);
 
   // Global Error Handler for API
   app.use(errorHandler);
+
 
   // Vite Middleware in development mode or Static Serving in production mode
   if (process.env.NODE_ENV !== 'production') {

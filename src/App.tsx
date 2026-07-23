@@ -2,7 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import { WatchlistItem, InstamartItem, ActivityEvent, SystemStats, SchedulerConfig } from './types';
 import { DEFAULT_RULES, INSTAMART_SAMPLE_PRODUCTS } from './lib/mockData';
 import { fetchSystemParameters, saveSystemParameters, resetSystemParameters } from './lib/api';
+import { 
+  fetchDashboardSummary, 
+  toggleEngineScan, 
+  triggerManualScan, 
+  triggerPanicStop, 
+  simulateOutage, 
+  restoreOnline, 
+  toggleFastSimulation,
+  postActivityLog 
+} from './lib/dashboardApi';
 import { WindowsFrame } from './components/WindowsFrame';
+
 import { NavigationSidebar } from './components/NavigationSidebar';
 import { DashboardView } from './components/DashboardView';
 import { WatchlistView } from './components/WatchlistView';
@@ -154,17 +165,48 @@ export default function App() {
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const uptimeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load system parameters from backend database on mount
+  // Load system parameters & dashboard summary from backend database on mount
   useEffect(() => {
     fetchSystemParameters()
       .then(fetchedParams => {
         setSettings(fetchedParams);
-        addEvent('System parameters retrieved successfully from backend storage.', 'info');
       })
       .catch(err => {
         console.warn('Could not load system parameters from backend API, using cached parameters:', err);
       });
+
+    fetchDashboardSummary()
+      .then(summary => {
+        setStats(summary.stats);
+        setIsScanning(summary.isScanning);
+        setRecentItems(summary.recentItems);
+        setEvents(summary.recentEvents);
+        setStoreStatus(summary.stats.storeStatus || 'online');
+        setReopenTimeStr(summary.stats.reopenTimeStr || '');
+        setOfflineCountdown(summary.stats.offlineCountdown || 0);
+        setIsFastSimulation(summary.stats.isFastSimulation ?? true);
+      })
+      .catch(err => {
+        console.warn('Could not load dashboard summary from backend API:', err);
+      });
   }, []);
+
+  // Sync dashboard summary periodically every 4 seconds
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      fetchDashboardSummary()
+        .then(summary => {
+          setStats(summary.stats);
+          setIsScanning(summary.isScanning);
+          setRecentItems(summary.recentItems);
+          setEvents(summary.recentEvents);
+        })
+        .catch(() => {});
+    }, 4000);
+
+    return () => clearInterval(pollInterval);
+  }, []);
+
 
   // Sync states to local storage
   useEffect(() => {
@@ -256,84 +298,44 @@ export default function App() {
     }
   };
 
-  const handleSimulateStoreOffline = (reopenTime: string | null) => {
-    // Stop standard countdown
+  const handleSimulateStoreOffline = async (reopenTime: string | null) => {
     setCountdown(schedulerConfig.refreshInterval);
-    
-    if (reopenTime) {
-      setStoreStatus('offline_reopen');
-      setReopenTimeStr(reopenTime);
-      
-      const targetDate = parseReopeningTime(reopenTime);
-      let seconds = 300; // default 5 mins
-      if (targetDate) {
-        seconds = Math.max(10, Math.floor((targetDate.getTime() - Date.now()) / 1000));
-      }
-      
-      if (isFastSimulation) {
-        seconds = 15;
-      }
-      
-      setOfflineCountdown(seconds);
-      setStats(prev => ({
-        ...prev,
-        status: 'offline_reopen',
-        storeStatus: 'offline_reopen',
-        offlineCountdown: seconds,
-        reopenTimeStr: reopenTime
-      }));
-      
-      addEvent(`Store temporarily unavailable`, 'warning');
-      addEvent(`Store expected to reopen at: ${reopenTime}`, 'info');
-      addEvent(`Monitoring paused until reopening time`, 'automation', `Pause duration: ${seconds} seconds until reopening at ${reopenTime}.\n(Fast Simulation Mode: ${isFastSimulation ? 'ACTIVE (15s)' : 'DISABLED'}).`);
-    } else {
-      setStoreStatus('offline_retry');
-      setReopenTimeStr('');
-      
-      let seconds = 15 * 60; // 15 mins
-      if (isFastSimulation) {
-        seconds = 15;
-      }
-      
-      setOfflineCountdown(seconds);
-      setStats(prev => ({
-        ...prev,
-        status: 'offline_retry',
-        storeStatus: 'offline_retry',
-        offlineCountdown: seconds,
-        reopenTimeStr: ''
-      }));
-      
-      addEvent(`Store temporarily unavailable`, 'warning');
-      addEvent(`Next automatic check in 15 minutes`, 'automation', `No reopening time specified. System will retry status checks automatically.\nNext automatic check in ${isFastSimulation ? '15 seconds' : '15 minutes'}.\n(Fast Simulation Mode: ${isFastSimulation ? 'ACTIVE (15s)' : 'DISABLED'}).`);
+    try {
+      const summary = await simulateOutage(reopenTime);
+      setStats(summary.stats);
+      setStoreStatus(summary.stats.storeStatus || 'online');
+      setReopenTimeStr(summary.stats.reopenTimeStr || '');
+      setOfflineCountdown(summary.stats.offlineCountdown || 0);
+      setEvents(summary.recentEvents);
+    } catch (err: any) {
+      console.error('Failed to simulate outage on server:', err);
     }
   };
 
-  const handleSimulateStoreOnline = () => {
-    setStoreStatus('online');
-    setReopenTimeStr('');
-    setOfflineCountdown(0);
-    
-    setStats(prev => ({
-      ...prev,
-      status: 'scanning',
-      storeStatus: 'online',
-      offlineCountdown: 0,
-      reopenTimeStr: ''
-    }));
-    
-    addEvent(`Store is live again`, 'success', 'Simulated store status restored to Live/Online.');
-    addEvent(`Monitoring resumed`, 'success');
+  const handleSimulateStoreOnline = async () => {
+    try {
+      const summary = await restoreOnline();
+      setStats(summary.stats);
+      setStoreStatus('online');
+      setReopenTimeStr('');
+      setOfflineCountdown(0);
+      setEvents(summary.recentEvents);
+    } catch (err: any) {
+      console.error('Failed to restore store status on server:', err);
+    }
   };
 
-  const handleToggleFastSimulation = (enabled: boolean) => {
+  const handleToggleFastSimulation = async (enabled: boolean) => {
     setIsFastSimulation(enabled);
-    setStats(prev => ({
-      ...prev,
-      isFastSimulation: enabled
-    }));
-    addEvent(`Fast Simulation Mode ${enabled ? 'ENABLED' : 'DISABLED'}`, 'info', `When store is offline, retry timers and reopen wait times are mapped to ${enabled ? '15 seconds' : 'actual clock differences'} for convenient evaluation.`);
+    try {
+      const summary = await toggleFastSimulation(enabled);
+      setStats(summary.stats);
+      setEvents(summary.recentEvents);
+    } catch (err: any) {
+      console.error('Failed to toggle fast simulation on server:', err);
+    }
   };
+
 
   // Polling simulation logic step
   const triggerSimulationQuery = () => {
@@ -581,33 +583,47 @@ export default function App() {
   }, [isScanning, watchlist, schedulerConfig, settings, cooldownRemainingSeconds, storeStatus, offlineCountdown, isFastSimulation]);
 
   // Actions
-  const handleToggleScan = () => {
+  const handleToggleScan = async () => {
     const newState = !isScanning;
     setIsScanning(newState);
     if (!newState) {
       setCountdown(schedulerConfig.refreshInterval);
     }
-    addEvent(
-      `Automation Engine state updated to: ${newState ? 'ACTIVE RUNNING' : 'SUSPENDED/IDLE'}`, 
-      newState ? 'success' : 'warning'
-    );
+    try {
+      const summary = await toggleEngineScan(newState);
+      setStats(summary.stats);
+      setEvents(summary.recentEvents);
+      setIsScanning(summary.isScanning);
+    } catch (err: any) {
+      console.error('Failed to toggle scan on server:', err);
+    }
   };
 
-  const handleManualScan = () => {
+  const handleManualScan = async () => {
     if (isScanning) return;
-    triggerSimulationQuery();
-    addEvent('Manual diagnostic query sent to Chrome debug port.', 'info');
+    try {
+      const { summary } = await triggerManualScan();
+      setStats(summary.stats);
+      setRecentItems(summary.recentItems);
+      setEvents(summary.recentEvents);
+    } catch (err: any) {
+      console.error('Failed to trigger manual scan on server:', err);
+    }
   };
 
-  const handlePanicStop = () => {
+  const handlePanicStop = async () => {
     setIsScanning(false);
     setCountdown(schedulerConfig.refreshInterval);
-    addEvent(
-      'EMERGENCY PANIC KILL: All automation intervals, checkouts, and socket queries terminated immediately.', 
-      'error',
-      'The loop was halted by the collector panic trigger.\nRemote Chrome debug port remains listening but all scraper timers have been safely flushed.'
-    );
+    try {
+      const summary = await triggerPanicStop();
+      setStats(summary.stats);
+      setEvents(summary.recentEvents);
+      setIsScanning(summary.isScanning);
+    } catch (err: any) {
+      console.error('Failed to execute panic stop on server:', err);
+    }
   };
+
 
   const handleAddRule = (newRuleFields: Omit<WatchlistItem, 'id' | 'detectionCount'>) => {
     const newRule: WatchlistItem = {
