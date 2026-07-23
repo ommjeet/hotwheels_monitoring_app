@@ -12,6 +12,15 @@ import {
   toggleFastSimulation,
   postActivityLog 
 } from './lib/dashboardApi';
+import {
+  fetchWatchlist,
+  createWatchlistItem,
+  updateWatchlistItem,
+  deleteWatchlistItem,
+  duplicateWatchlistItem,
+  bulkDeleteWatchlistItems,
+  bulkUpdateWatchlistStatus
+} from './lib/watchlistApi';
 import { WindowsFrame } from './components/WindowsFrame';
 
 import { NavigationSidebar } from './components/NavigationSidebar';
@@ -165,7 +174,7 @@ export default function App() {
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const uptimeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load system parameters & dashboard summary from backend database on mount
+  // Load system parameters, dashboard summary & watchlist from backend database on mount
   useEffect(() => {
     fetchSystemParameters()
       .then(fetchedParams => {
@@ -189,9 +198,17 @@ export default function App() {
       .catch(err => {
         console.warn('Could not load dashboard summary from backend API:', err);
       });
+
+    fetchWatchlist()
+      .then(data => {
+        setWatchlist(data.items);
+      })
+      .catch(err => {
+        console.warn('Could not load watchlist from backend API:', err);
+      });
   }, []);
 
-  // Sync dashboard summary periodically every 4 seconds
+  // Sync dashboard summary and watchlist periodically every 4 seconds
   useEffect(() => {
     const pollInterval = setInterval(() => {
       fetchDashboardSummary()
@@ -200,6 +217,12 @@ export default function App() {
           setIsScanning(summary.isScanning);
           setRecentItems(summary.recentItems);
           setEvents(summary.recentEvents);
+        })
+        .catch(() => {});
+
+      fetchWatchlist()
+        .then(data => {
+          setWatchlist(data.items);
         })
         .catch(() => {});
     }, 4000);
@@ -625,44 +648,64 @@ export default function App() {
   };
 
 
-  const handleAddRule = (newRuleFields: Omit<WatchlistItem, 'id' | 'detectionCount'>) => {
-    const newRule: WatchlistItem = {
-      ...newRuleFields,
-      id: `rule-${Math.random().toString()}`,
-      detectionCount: 0
-    };
-    setWatchlist(prev => [...prev, newRule]);
-    addEvent(`New Watchlist Target created: "${newRule.name}" matching keyword "${newRule.keyword}"`, 'info');
-  };
-
-  const handleUpdateRule = (id: string, updatedFields: Partial<WatchlistItem>) => {
-    setWatchlist(prev => prev.map(item => item.id === id ? { ...item, ...updatedFields } : item));
-    const target = watchlist.find(item => item.id === id);
-    if (target) {
-      addEvent(`Watchlist Rule "${target.name}" parameters modified in registry.`, 'info');
+  const handleAddRule = async (newRuleFields: Omit<WatchlistItem, 'id' | 'detectionCount'>) => {
+    try {
+      const newRule = await createWatchlistItem(newRuleFields);
+      setWatchlist(prev => [newRule, ...prev]);
+      addEvent(`New Watchlist Target created: "${newRule.name}" matching keyword "${newRule.keyword}"`, 'info');
+    } catch (err: any) {
+      console.error('Failed to create watchlist rule on server:', err);
+      alert(err.message || 'Failed to create watchlist rule.');
     }
   };
 
-  const handleDeleteRule = (id: string) => {
-    const target = watchlist.find(item => item.id === id);
-    setWatchlist(prev => prev.filter(item => item.id !== id));
-    if (target) {
-      addEvent(`Watchlist Rule "${target.name}" removed from local storage profiles.`, 'warning');
+  const handleUpdateRule = async (id: string, updatedFields: Partial<WatchlistItem>) => {
+    try {
+      const updated = await updateWatchlistItem(id, updatedFields);
+      setWatchlist(prev => prev.map(item => item.id === id ? updated : item));
+      addEvent(`Watchlist Rule "${updated.name}" parameters modified in registry.`, 'info');
+    } catch (err: any) {
+      console.error('Failed to update watchlist rule on server:', err);
     }
   };
 
-  const handleDuplicateRule = (id: string) => {
-    const target = watchlist.find(item => item.id === id);
-    if (target) {
-      const duplicated: WatchlistItem = {
-        ...target,
-        id: `rule-${Math.random().toString()}`,
-        name: `${target.name} (Copy)`,
-        detectionCount: 0,
-        lastDetected: undefined
-      };
-      setWatchlist(prev => [...prev, duplicated]);
+  const handleDeleteRule = async (id: string) => {
+    try {
+      const removed = await deleteWatchlistItem(id);
+      setWatchlist(prev => prev.filter(item => item.id !== id));
+      addEvent(`Watchlist Rule "${removed.name}" removed from database.`, 'warning');
+    } catch (err: any) {
+      console.error('Failed to delete watchlist rule on server:', err);
+    }
+  };
+
+  const handleDuplicateRule = async (id: string) => {
+    try {
+      const duplicated = await duplicateWatchlistItem(id);
+      setWatchlist(prev => [duplicated, ...prev]);
       addEvent(`Watchlist Rule duplicated: "${duplicated.name}"`, 'info');
+    } catch (err: any) {
+      console.error('Failed to duplicate watchlist rule on server:', err);
+    }
+  };
+
+  const handleBulkDelete = async (ids: string[]) => {
+    try {
+      await bulkDeleteWatchlistItems(ids);
+      setWatchlist(prev => prev.filter(item => !ids.includes(item.id)));
+      addEvent(`Bulk delete completed: ${ids.length} items removed.`, 'warning');
+    } catch (err: any) {
+      console.error('Failed to bulk delete watchlist rules on server:', err);
+    }
+  };
+
+  const handleBulkToggleActive = async (ids: string[], active: boolean) => {
+    try {
+      await bulkUpdateWatchlistStatus(ids, active);
+      setWatchlist(prev => prev.map(item => ids.includes(item.id) ? { ...item, active } : item));
+      addEvent(`Bulk status update completed: ${ids.length} items set to ${active ? 'ACTIVE' : 'INACTIVE'}.`, 'info');
+    } catch (err: any) {
+      console.error('Failed to bulk update watchlist status on server:', err);
     }
   };
 
@@ -762,6 +805,8 @@ export default function App() {
             onUpdateRule={handleUpdateRule}
             onDeleteRule={handleDeleteRule}
             onDuplicateRule={handleDuplicateRule}
+            onBulkDelete={handleBulkDelete}
+            onBulkToggleActive={handleBulkToggleActive}
           />
         )}
 

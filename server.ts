@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import systemParametersRouter from './server/routes/systemParameters.routes';
 import dashboardRouter from './server/routes/dashboard.routes';
+import watchlistRouter from './server/routes/watchlist.routes';
 import { requestLogger } from './server/middleware/logger';
 import { errorHandler } from './server/middleware/errorHandler';
 
@@ -24,6 +25,7 @@ async function startServer() {
   // API Routes
   app.use('/api/system-parameters', systemParametersRouter);
   app.use('/api/dashboard', dashboardRouter);
+  app.use('/api/watchlist', watchlistRouter);
 
   // Global Error Handler for API
   app.use(errorHandler);

@@ -26,6 +26,8 @@ interface WatchlistViewProps {
   onUpdateRule: (id: string, updatedFields: Partial<WatchlistItem>) => void;
   onDeleteRule: (id: string) => void;
   onDuplicateRule: (id: string) => void;
+  onBulkDelete?: (ids: string[]) => void;
+  onBulkToggleActive?: (ids: string[], active: boolean) => void;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
@@ -33,7 +35,9 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   onAddRule,
   onUpdateRule,
   onDeleteRule,
-  onDuplicateRule
+  onDuplicateRule,
+  onBulkDelete,
+  onBulkToggleActive
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
@@ -144,13 +148,21 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
 
   const handleBulkDelete = () => {
     if (confirm(`Are you sure you want to delete ${selectedIds.length} items from watchlist?`)) {
-      selectedIds.forEach(id => onDeleteRule(id));
+      if (onBulkDelete) {
+        onBulkDelete(selectedIds);
+      } else {
+        selectedIds.forEach(id => onDeleteRule(id));
+      }
       setSelectedIds([]);
     }
   };
 
   const handleBulkToggleActive = (active: boolean) => {
-    selectedIds.forEach(id => onUpdateRule(id, { active }));
+    if (onBulkToggleActive) {
+      onBulkToggleActive(selectedIds, active);
+    } else {
+      selectedIds.forEach(id => onUpdateRule(id, { active }));
+    }
     setSelectedIds([]);
   };
 
