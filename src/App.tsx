@@ -21,6 +21,11 @@ import {
   bulkDeleteWatchlistItems,
   bulkUpdateWatchlistStatus
 } from './lib/watchlistApi';
+import {
+  fetchSchedulerConfig,
+  updateSchedulerConfigApi
+} from './lib/schedulerApi';
+import { activityApi } from './lib/activityApi';
 import { WindowsFrame } from './components/WindowsFrame';
 
 import { NavigationSidebar } from './components/NavigationSidebar';
@@ -206,6 +211,14 @@ export default function App() {
       .catch(err => {
         console.warn('Could not load watchlist from backend API:', err);
       });
+
+    fetchSchedulerConfig()
+      .then(cfg => {
+        setSchedulerConfig(cfg);
+      })
+      .catch(err => {
+        console.warn('Could not load scheduler config from backend API:', err);
+      });
   }, []);
 
   // Sync dashboard summary and watchlist periodically every 4 seconds
@@ -281,7 +294,7 @@ export default function App() {
   // Log Event helper
   const addEvent = (message: string, category: 'info' | 'success' | 'warning' | 'error' | 'automation' | 'detection', details?: string) => {
     const newEvent: ActivityEvent = {
-      id: `ev-${Math.random().toString()}`,
+      id: `ev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: new Date().toLocaleTimeString(),
       message,
       category,
@@ -289,7 +302,12 @@ export default function App() {
     };
     setEvents(prev => {
       const truncated = prev.length > 200 ? prev.slice(prev.length - 200) : prev;
-      return [...truncated, newEvent];
+      return [newEvent, ...truncated];
+    });
+
+    // Asynchronously log to server database
+    postActivityLog(message, category, details).catch(err => {
+      console.warn('Failed to post activity log to backend API:', err);
     });
   };
 
@@ -719,14 +737,26 @@ export default function App() {
     addEvent('Screenshot gallery memory successfully flushed.', 'warning');
   };
 
-  const handleClearEvents = () => {
-    setEvents([]);
+  const handleClearEvents = async () => {
+    try {
+      await activityApi.clearActivities();
+      setEvents([]);
+    } catch (err) {
+      console.error('Failed to clear activity events on server:', err);
+      setEvents([]);
+    }
   };
 
-  const handleUpdateSchedulerConfig = (newConfig: SchedulerConfig) => {
-    setSchedulerConfig(newConfig);
-    setCountdown(newConfig.refreshInterval);
-    addEvent(`Scheduler settings committed. Interval is now set to ${newConfig.refreshInterval} seconds.`, 'success');
+  const handleUpdateSchedulerConfig = async (newConfig: SchedulerConfig) => {
+    try {
+      const updated = await updateSchedulerConfigApi(newConfig);
+      setSchedulerConfig(updated);
+      setCountdown(updated.refreshInterval);
+      addEvent(`Scheduler configuration committed to backend DB. Working hours (${updated.startTime} - ${updated.endTime}), Refresh interval ${updated.refreshInterval}s.`, 'success');
+    } catch (err: any) {
+      console.error('Failed to update scheduler configuration on server:', err);
+      addEvent(`Failed to update scheduler config: ${err.message}`, 'error');
+    }
   };
 
   const handleUpdateSettings = async (newSettings: any) => {

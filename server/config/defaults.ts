@@ -218,3 +218,126 @@ export const DEFAULT_INITIAL_WATCHLIST = [
   }
 ];
 
+export interface SchedulerConfig {
+  startTime: string; // e.g. "08:00"
+  endTime: string;   // e.g. "22:00"
+  refreshInterval: number; // in seconds
+  workingDays: string[]; // e.g. ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+  autoStart: boolean;
+  autoStop: boolean;
+  orderLimit: number;
+  updatedAt?: string;
+}
+
+export interface ScheduledJob {
+  id: string;
+  name: string;
+  targetRuleId?: string;
+  scheduleType: 'recurring' | 'one-time';
+  intervalSeconds: number;
+  cronExpression?: string;
+  oneTimeTime?: string;
+  status: 'active' | 'paused' | 'disabled' | 'completed' | 'failed';
+  enabled: boolean;
+  maxRetries: number;
+  retryCount: number;
+  retryDelaySeconds: number;
+  lastRunAt?: string;
+  nextRunAt?: string;
+  totalExecutions: number;
+  successfulExecutions: number;
+  failedExecutions: number;
+  lastError?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface JobExecutionRecord {
+  id: string;
+  jobId: string;
+  jobName: string;
+  timestamp: string;
+  status: 'success' | 'failed' | 'retrying';
+  durationMs: number;
+  matchedCount: number;
+  attemptNumber: number;
+  details?: string;
+  errorMessage?: string;
+}
+
+export const DEFAULT_SCHEDULER_CONFIG: SchedulerConfig = {
+  startTime: '08:00',
+  endTime: '22:00',
+  refreshInterval: 4,
+  workingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+  autoStart: true,
+  autoStop: true,
+  orderLimit: 2,
+  updatedAt: new Date().toISOString()
+};
+
+export const DEFAULT_SCHEDULED_JOBS: ScheduledJob[] = [
+  {
+    id: 'job-1',
+    name: 'Mainline & STH Scraper Loop',
+    targetRuleId: 'all',
+    scheduleType: 'recurring',
+    intervalSeconds: 4,
+    status: 'active',
+    enabled: true,
+    maxRetries: 3,
+    retryCount: 0,
+    retryDelaySeconds: 5,
+    lastRunAt: new Date().toISOString(),
+    nextRunAt: new Date(Date.now() + 4000).toISOString(),
+    totalExecutions: 48,
+    successfulExecutions: 47,
+    failedExecutions: 1,
+    createdAt: new Date(Date.now() - 3600000 * 24).toISOString()
+  },
+  {
+    id: 'job-2',
+    name: 'Nightly Watchlist Sync & Inventory Audit',
+    targetRuleId: 'rule-1',
+    scheduleType: 'recurring',
+    intervalSeconds: 3600,
+    status: 'active',
+    enabled: true,
+    maxRetries: 2,
+    retryCount: 0,
+    retryDelaySeconds: 10,
+    lastRunAt: new Date(Date.now() - 1800000).toISOString(),
+    nextRunAt: new Date(Date.now() + 1800000).toISOString(),
+    totalExecutions: 12,
+    successfulExecutions: 12,
+    failedExecutions: 0,
+    createdAt: new Date(Date.now() - 3600000 * 48).toISOString()
+  }
+];
+
+export const DEFAULT_JOB_HISTORY: JobExecutionRecord[] = [
+  {
+    id: 'exec-101',
+    jobId: 'job-1',
+    jobName: 'Mainline & STH Scraper Loop',
+    timestamp: new Date(Date.now() - 300000).toISOString(),
+    status: 'success',
+    durationMs: 138,
+    matchedCount: 1,
+    attemptNumber: 1,
+    details: 'Polled Instamart endpoint. Matched STH rule "Nissan Skyline GT-R".'
+  },
+  {
+    id: 'exec-100',
+    jobId: 'job-1',
+    jobName: 'Mainline & STH Scraper Loop',
+    timestamp: new Date(Date.now() - 600000).toISOString(),
+    status: 'success',
+    durationMs: 145,
+    matchedCount: 0,
+    attemptNumber: 1,
+    details: 'Polled Instamart endpoint. No matches found.'
+  }
+];
+
+

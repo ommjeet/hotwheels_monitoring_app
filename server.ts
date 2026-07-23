@@ -4,12 +4,21 @@ import { createServer as createViteServer } from 'vite';
 import systemParametersRouter from './server/routes/systemParameters.routes';
 import dashboardRouter from './server/routes/dashboard.routes';
 import watchlistRouter from './server/routes/watchlist.routes';
+import schedulerRouter from './server/routes/scheduler.routes';
+import activityRouter from './server/routes/activity.routes';
+import { schedulerEngineService } from './server/services/schedulerEngine.service';
+import { activityService } from './server/services/activity.service';
 import { requestLogger } from './server/middleware/logger';
 import { errorHandler } from './server/middleware/errorHandler';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Initialize Scheduler Engine Background Worker
+  await schedulerEngineService.initialize().catch(err => {
+    console.error('[Server] Failed to start scheduler engine background ticker:', err);
+  });
 
   // JSON Body Parser
   app.use(express.json());
@@ -26,10 +35,18 @@ async function startServer() {
   app.use('/api/system-parameters', systemParametersRouter);
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/watchlist', watchlistRouter);
+  app.use('/api/scheduler', schedulerRouter);
+  app.use('/api/activity', activityRouter);
 
   // Global Error Handler for API
   app.use(errorHandler);
 
+  // Log server boot
+  await activityService.logSuccess(
+    'Instamart Hot Wheels Collector backend server booted.',
+    `Port: ${PORT} | Environment: ${process.env.NODE_ENV || 'development'}`,
+    'system'
+  ).catch(err => console.error('Failed to log boot event:', err));
 
   // Vite Middleware in development mode or Static Serving in production mode
   if (process.env.NODE_ENV !== 'production') {

@@ -1,6 +1,7 @@
 import { getDatabase } from '../db/database';
 import { SystemParameters, DEFAULT_SYSTEM_PARAMETERS } from '../config/defaults';
 import { UpdateSystemParametersInput } from '../models/systemParameters.model';
+import { activityService } from './activity.service';
 
 export class SystemParametersService {
   async getSystemParameters(): Promise<SystemParameters> {
@@ -23,6 +24,12 @@ export class SystemParametersService {
     db.data.systemParameters = updatedParams;
     await db.write();
 
+    await activityService.logInfo(
+      'System Parameters configuration updated.',
+      `Scan interval: ${updatedParams.scanIntervalSeconds}s | Location: ${updatedParams.userLocation} | Jitter: ${updatedParams.enableJitter ? 'ENABLED' : 'DISABLED'}`,
+      'config'
+    );
+
     return updatedParams;
   }
 
@@ -35,6 +42,12 @@ export class SystemParametersService {
 
     db.data.systemParameters = resetParams;
     await db.write();
+
+    await activityService.logWarning(
+      'System Parameters reset to factory default values.',
+      `Scan interval reset to ${resetParams.scanIntervalSeconds}s.`,
+      'config'
+    );
 
     return resetParams;
   }

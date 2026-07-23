@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Terminal, 
   Search, 
@@ -6,7 +6,6 @@ import {
   Copy, 
   Check,
   Download, 
-  Filter,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -14,9 +13,14 @@ import {
   ChevronRight,
   ChevronDown,
   Activity as ActivityIcon,
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  FileSpreadsheet,
+  FileCode,
+  FileText
 } from 'lucide-react';
 import { ActivityEvent } from '../types';
+import { activityApi } from '../lib/activityApi';
 
 interface ActivityViewProps {
   events: ActivityEvent[];
@@ -24,13 +28,51 @@ interface ActivityViewProps {
 }
 
 export const ActivityView: React.FC<ActivityViewProps> = ({
-  events,
+  events: initialEvents,
   onClearEvents
 }) => {
+  const [events, setEvents] = useState<ActivityEvent[]>(initialEvents);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [exportFormat, setExportFormat] = useState<'txt' | 'csv' | 'json'>('txt');
+  const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
+
+  // Sync props when initialEvents change
+  useEffect(() => {
+    if (initialEvents && initialEvents.length > 0) {
+      setEvents(initialEvents);
+    }
+  }, [initialEvents]);
+
+  // Load events from backend API on mount or category change
+  const loadEventsFromApi = async () => {
+    try {
+      setIsLoading(true);
+      const res = await activityApi.fetchActivities({
+        category: categoryFilter !== 'all' ? categoryFilter : undefined,
+        search: searchQuery || undefined,
+        limit: 200
+      });
+      if (res.data) {
+        setEvents(res.data);
+      }
+    } catch (err) {
+      console.warn('Could not fetch activity events from API:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEventsFromApi();
+    const interval = setInterval(() => {
+      loadEventsFromApi();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [categoryFilter, searchQuery]);
 
   const categories = [
     { id: 'all', label: 'All Events' },
@@ -51,17 +93,35 @@ export const ActivityView: React.FC<ActivityViewProps> = ({
     }, 2000);
   };
 
-  const handleExportEvents = () => {
-    const lines = filteredEvents.map(ev => 
-      `[${ev.timestamp}] [${ev.category.toUpperCase()}] ${ev.message} ${ev.details ? `| Details: ${ev.details}` : ''}`
+  const handleExportEvents = (format: 'txt' | 'csv' | 'json') => {
+    setShowExportMenu(false);
+    const exportUrl = activityApi.getExportUrl(
+      {
+        category: categoryFilter !== 'all' ? categoryFilter : undefined,
+        search: searchQuery || undefined
+      },
+      format
     );
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
+    
     const link = document.createElement('a');
-    link.href = url;
-    link.download = `hotwheels_monitor_logs_${new Date().toISOString().slice(0, 10)}.txt`;
+    link.href = exportUrl;
+    link.download = `hotwheels_monitor_logs_${new Date().toISOString().slice(0, 10)}.${format}`;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+  };
+
+  const handleClearConsole = async () => {
+    try {
+      setIsLoading(true);
+      await activityApi.clearActivities();
+      setEvents([]);
+      onClearEvents();
+    } catch (err) {
+      console.error('Failed to clear console logs:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleExpandEvent = (id: string) => {
@@ -85,26 +145,69 @@ export const ActivityView: React.FC<ActivityViewProps> = ({
             <h1 className="font-display font-bold text-xl text-slate-800 flex items-center space-x-2.5">
               <Terminal className="h-5 w-5 text-blue-500" />
               <span>Diagnostic Activity Stream</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-50 text-emerald-700 border border-emerald-100 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping mr-1.5"></span>
+                LIVE STREAM
+              </span>
             </h1>
             <p className="text-[11px] text-slate-450 font-mono mt-1">
-              High-resolution system activity logs for active local browser sessions.
+              High-resolution system activity logs persisted in real-time LowDB storage.
             </p>
           </div>
 
-          <div className="flex items-center space-x-2 font-mono">
+          <div className="flex items-center space-x-2 font-mono relative">
             <button
-              onClick={handleExportEvents}
-              disabled={filteredEvents.length === 0}
-              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-blue-400 px-4 py-2 font-bold text-xs flex items-center space-x-2 transition rounded-full cursor-pointer disabled:opacity-30 disabled:pointer-events-none uppercase tracking-wider shadow-sm"
-              title="Export filtered logs as flat text file"
+              onClick={loadEventsFromApi}
+              disabled={isLoading}
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-blue-400 p-2 font-bold text-xs flex items-center transition rounded-full cursor-pointer disabled:opacity-30 shadow-sm"
+              title="Refresh logs from server"
             >
-              <Download className="h-4 w-4 text-blue-500 stroke-[2.5]" />
-              <span>Export (TXT)</span>
+              <RefreshCw className={`h-4 w-4 text-blue-500 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
 
+            {/* Export Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                disabled={filteredEvents.length === 0}
+                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-blue-400 px-4 py-2 font-bold text-xs flex items-center space-x-2 transition rounded-full cursor-pointer disabled:opacity-30 disabled:pointer-events-none uppercase tracking-wider shadow-sm"
+                title="Export filtered logs in various formats"
+              >
+                <Download className="h-4 w-4 text-blue-500 stroke-[2.5]" />
+                <span>Export ({exportFormat.toUpperCase()})</span>
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              </button>
+
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-blue-50 py-1.5 z-20 font-mono text-xs">
+                  <button
+                    onClick={() => { setExportFormat('txt'); handleExportEvents('txt'); }}
+                    className="w-full text-left px-4 py-2 hover:bg-blue-50/50 flex items-center space-x-2 text-slate-700 cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-blue-500" />
+                    <span>Plain Text (.TXT)</span>
+                  </button>
+                  <button
+                    onClick={() => { setExportFormat('csv'); handleExportEvents('csv'); }}
+                    className="w-full text-left px-4 py-2 hover:bg-blue-50/50 flex items-center space-x-2 text-slate-700 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>CSV Spreadsheet (.CSV)</span>
+                  </button>
+                  <button
+                    onClick={() => { setExportFormat('json'); handleExportEvents('json'); }}
+                    className="w-full text-left px-4 py-2 hover:bg-blue-50/50 flex items-center space-x-2 text-slate-700 cursor-pointer"
+                  >
+                    <FileCode className="h-3.5 w-3.5 text-purple-500" />
+                    <span>JSON Object (.JSON)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
-              onClick={onClearEvents}
-              disabled={events.length === 0}
+              onClick={handleClearConsole}
+              disabled={events.length === 0 || isLoading}
               className="win-btn-primary hover:opacity-95 text-white px-5 py-2 font-bold text-xs flex items-center space-x-2 transition rounded-full cursor-pointer disabled:opacity-30 disabled:pointer-events-none uppercase tracking-wider shadow-md shadow-blue-500/10"
               title="Flush current session console memory"
             >
@@ -167,23 +270,17 @@ export const ActivityView: React.FC<ActivityViewProps> = ({
               
               // Map Category style
               let categoryColor = 'text-slate-600 bg-slate-50 border-slate-100';
-              let CategoryIcon = Info;
 
               if (ev.category === 'success') {
                 categoryColor = 'text-emerald-700 bg-emerald-50 border-emerald-100 font-bold';
-                CategoryIcon = CheckCircle2;
               } else if (ev.category === 'warning') {
                 categoryColor = 'text-amber-700 bg-amber-50 border-amber-100';
-                CategoryIcon = AlertTriangle;
               } else if (ev.category === 'error') {
                 categoryColor = 'text-rose-700 bg-rose-50 border-rose-100 font-bold';
-                CategoryIcon = XCircle;
               } else if (ev.category === 'automation') {
                 categoryColor = 'text-blue-700 bg-blue-50 border-blue-100';
-                CategoryIcon = ActivityIcon;
               } else if (ev.category === 'detection') {
                 categoryColor = 'text-purple-700 bg-purple-50 border-purple-100 font-bold';
-                CategoryIcon = Sparkles;
               }
 
               return (
